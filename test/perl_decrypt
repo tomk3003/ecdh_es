@@ -1,0 +1,16 @@
+#!/bin/env perl
+use strict;
+use warnings;
+use IO::File;
+use Crypt::ECDH_ES qw(ecdhes_decrypt);
+
+die 'usage: decrypt <private_key_file> <crypted_hex>'
+    unless @ARGV == 2;
+
+my $fh = IO::File->new($ARGV[0], 'r')
+    or die "error reading private key from $ARGV[0] ", $!, "\n";
+my $private_key = $fh->getline;
+$fh->close;
+chomp($private_key);
+
+print ecdhes_decrypt(pack('H*', $private_key), pack('H*', $ARGV[1]));

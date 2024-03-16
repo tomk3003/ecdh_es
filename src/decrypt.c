@@ -1,7 +1,15 @@
 #include <stdio.h>
 #include <string.h>
 
-#define DEBUG
+//#define DEBUG
+#ifdef DEBUG
+#define DPRINTF 1
+#else
+#define DPRINTF 0
+#endif
+
+#define dprintf(fmt, ...) \
+    do { if (DPRINTF) printf(fmt, __VA_ARGS__); } while (0)
 
 #include "curve25519-donna.c"
 #include "aes.c"
@@ -13,16 +21,18 @@ const unsigned HEX_LENGTH     = 64;
 
 
 void phex (const char * txt, const uint8_t * in, const size_t size) {
+#ifdef DEBUG
     printf("%s: ", txt);
     int i;
     for (i = 0; i < size; i++) {
         printf("%02X", in[i]);
     }
     printf("\n");
+#endif
 }
 
 
-uint8_t key_from_file (const char * fname, char * key) {
+uint8_t key_from_file (const char * fname, uint8_t * key) {
 
     FILE *fp = fopen(fname, "r");
     if (fp == NULL) {
@@ -41,7 +51,7 @@ uint8_t key_from_file (const char * fname, char * key) {
 
     int i;
  	for (i = 0; i < KEY_LENGTH; i++) {
-        sscanf(pkh_pos, "%2hx", &key[i]);
+        sscanf(pkh_pos, "%2hhx", &key[i]);
         pkh_pos += 2;
     }
 
@@ -49,36 +59,38 @@ uint8_t key_from_file (const char * fname, char * key) {
 }
 
 
-uint8_t parse_packed_data (char * data, char * public_key, char * mac, char * ciphertext) {
+uint8_t parse_packed_data (char * data, uint8_t ** public_key, uint8_t ** mac, uint8_t ** ciphertext) {
 
     unsigned char * in_pos = data;
+    dprintf("parsing data: >>%s<<\n", data);
 
-    unsigned char option_count;
-    sscanf(in_pos, "%2hx", &option_count);
+    uint8_t option_count;
+    sscanf(in_pos, "%2hhx", &option_count);
     in_pos += 2 + option_count * 2;
+    dprintf("option_count: %d\n", option_count);
 
-    unsigned char public_size;
-    sscanf(in_pos, "%2hx", &public_size);
+    uint8_t public_size;
+    sscanf(in_pos, "%2hhx", &public_size);
     in_pos += 2;
     if ( public_size != KEY_LENGTH ) {
         printf("invalid public key length %d in encrypted value\n", public_size);
         return 1;
     }
+    dprintf("public_size: %d\n", public_size);
 
     int i;
-    unsigned char pkey [KEY_LENGTH + 1];
+    *public_key = (uint8_t*)malloc((KEY_LENGTH + 1));
  	for (i = 0; i < KEY_LENGTH; i++) {
-        sscanf(in_pos, "%2hx", &pkey[i]);
+        sscanf(in_pos, "%2hhx", &(*public_key)[i]);
         in_pos += 2;
     }
-    public_key = pkey;
-    phex("public_key", public_key, KEY_LENGTH);
+    phex("public_key", *public_key, KEY_LENGTH);
 
     const unsigned MAC_LENGTH = 32;
-    unsigned short mac_size;
-    sscanf(in_pos, "%4hx", &mac_size);
-    printf("mac_size_hex: %04X\n", mac_size);
-    printf("mac_size: %d\n", mac_size);
+    uint8_t mac_size;
+    sscanf(in_pos, "%4hhx", &mac_size);
+    dprintf("mac_size_hex: %04X\n", mac_size);
+    dprintf("mac_size: %d\n", mac_size);
     in_pos += 4;
 
     if ( mac_size != MAC_LENGTH ) {
@@ -86,27 +98,27 @@ uint8_t parse_packed_data (char * data, char * public_key, char * mac, char * ci
         return 1;
     }
 
-    unsigned char lmac [MAC_LENGTH + 1];
+    free(*mac);
+    *mac = (uint8_t*)malloc((MAC_LENGTH + 1) * sizeof(uint8_t));
  	for (i = 0; i < MAC_LENGTH; i++) {
-        sscanf(in_pos, "%2hx", &lmac[i]);
+        sscanf(in_pos, "%2hhx", &(*mac)[i]);
         in_pos += 2;
     }
-    mac = lmac;
-    phex("mac", mac, MAC_LENGTH);
+    phex("mac", *mac, MAC_LENGTH);
 
-    uint32_t cipher_size;
+    long unsigned int cipher_size;
     sscanf(in_pos, "%8lx", &cipher_size);
-    printf("cipher_size_hex: %08X\n", cipher_size);
-    printf("cipher_size: %d\n", cipher_size);
+    dprintf("cipher_size_hex: %08lX\n", cipher_size);
+    dprintf("cipher_size: %ld\n", cipher_size);
     in_pos += 8;
 
-    unsigned char ctext [cipher_size + 1];
+    free(*ciphertext);
+    *ciphertext = (uint8_t*)malloc((cipher_size + 1) * sizeof(uint8_t));
  	for (i = 0; i < cipher_size; i++) {
-        sscanf(in_pos, "%2hx", &ctext[i]);
+        sscanf(in_pos, "%2hhx", &(*ciphertext)[i]);
         in_pos += 2;
     }
-    ciphertext = ctext;
-    phex("ciphertext", ciphertext, cipher_size);
+    phex("ciphertext", *ciphertext, cipher_size);
 
     return 0;
 }
@@ -119,25 +131,29 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    unsigned char private_key [KEY_LENGTH + 1];
+    // private key from file
+    uint8_t private_key [KEY_LENGTH + 1];
     uint8_t err = key_from_file(argv[1], private_key);
     if ( err > 0 ) exit(err);
 #ifdef DEBUG
     phex("private_key", private_key, KEY_LENGTH);
 #endif
 
-    unsigned char * public_key;
-    unsigned char * mac;
-    unsigned char * ciphertext;
-    err = parse_packed_data(argv[2], public_key, mac, ciphertext);
+    // unpack encrypted hex string from argv[2]
+    uint8_t * public_key;
+    uint8_t * mac;
+    uint8_t * ciphertext;
+    err = parse_packed_data(argv[2], &public_key, &mac, &ciphertext);
     if ( err > 0 ) exit(err);
 
-
+    // generate shared key
     const unsigned SHARED_SIZE = 32;
     uint8_t shared [SHARED_SIZE];
     curve25519_donna(shared, private_key, public_key);
     phex("shared", shared, SHARED_SIZE);
 
+    // take sha256 of shared key and split
+    // into encrypt_key and sign_key (16 bytes each)
     SHA256_HASH shared_sha256;
     Sha256Calculate(shared, SHARED_SIZE, &shared_sha256);
 
@@ -155,6 +171,7 @@ int main(int argc, char **argv) {
     phex("encrypt_key", encrypt_key, PART_SIZE);
     phex("sign_key", sign_key, PART_SIZE);
 
+    // take sha256 from public key and use first 16 bytes as iv
     SHA256_HASH public_sha256;
     Sha256Calculate(public_key, KEY_LENGTH, &public_sha256);
 
@@ -167,17 +184,21 @@ int main(int argc, char **argv) {
 
     // TODO: check MAC!
 
+    // decrypt ciphertext with encrypt_key and iv
     struct AES_ctx ctx;
-    int cipher_size = sizeof &ciphertext;
+    int cipher_size = strlen(ciphertext);
     AES_init_ctx_iv(&ctx, encrypt_key, iv);
-    AES_CBC_decrypt_buffer(&ctx, &ciphertext, cipher_size);
-    phex("ciphertext", &ciphertext, cipher_size);
+    AES_CBC_decrypt_buffer(&ctx, ciphertext, cipher_size);
+    phex("ciphertext", ciphertext, cipher_size);
+
+    // remove padding given in last character
     uint8_t pad_size = ciphertext[cipher_size-1];
  	for (i = cipher_size - pad_size; i < cipher_size; i++) {
+ 	    if ( ciphertext[i] != ciphertext[cipher_size-1]) break;
         ciphertext[i] = 0;
     }
     phex("ciphertext no padding", ciphertext, cipher_size);
-    printf("decrypted: %s", ciphertext);
+    printf("%s", ciphertext);
 
     return 0;
 }
