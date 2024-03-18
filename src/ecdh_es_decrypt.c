@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <string.h>
 
-//#define DEBUG
 #ifdef DEBUG
 #define DPRINTF 1
 #else
@@ -79,7 +78,7 @@ uint8_t parse_packed_data (char * data, uint8_t ** public_key, uint8_t ** mac, u
     dprintf("public_size: %d\n", public_size);
 
     int i;
-    *public_key = (uint8_t*)malloc((KEY_LENGTH + 1));
+    *public_key = malloc((KEY_LENGTH + 1));
  	for (i = 0; i < KEY_LENGTH; i++) {
         sscanf(in_pos, "%2hhx", &(*public_key)[i]);
         in_pos += 2;
@@ -98,8 +97,7 @@ uint8_t parse_packed_data (char * data, uint8_t ** public_key, uint8_t ** mac, u
         return 1;
     }
 
-    free(*mac);
-    *mac = (uint8_t*)malloc((MAC_LENGTH + 1) * sizeof(uint8_t));
+    *mac = malloc(MAC_LENGTH + 1);
  	for (i = 0; i < MAC_LENGTH; i++) {
         sscanf(in_pos, "%2hhx", &(*mac)[i]);
         in_pos += 2;
@@ -112,8 +110,7 @@ uint8_t parse_packed_data (char * data, uint8_t ** public_key, uint8_t ** mac, u
     dprintf("cipher_size: %ld\n", cipher_size);
     in_pos += 8;
 
-    free(*ciphertext);
-    *ciphertext = (uint8_t*)malloc((cipher_size + 1) * sizeof(uint8_t));
+    *ciphertext = malloc(cipher_size + 1);
  	for (i = 0; i < cipher_size; i++) {
         sscanf(in_pos, "%2hhx", &(*ciphertext)[i]);
         in_pos += 2;
@@ -135,16 +132,15 @@ int main(int argc, char **argv) {
     uint8_t private_key [KEY_LENGTH + 1];
     uint8_t err = key_from_file(argv[1], private_key);
     if ( err > 0 ) exit(err);
-#ifdef DEBUG
     phex("private_key", private_key, KEY_LENGTH);
-#endif
 
     // unpack encrypted hex string from argv[2]
-    uint8_t * public_key;
+    uint8_t *public_key;
     uint8_t * mac;
     uint8_t * ciphertext;
     err = parse_packed_data(argv[2], &public_key, &mac, &ciphertext);
     if ( err > 0 ) exit(err);
+    phex("public_key", public_key, KEY_LENGTH);
 
     // generate shared key
     const unsigned SHARED_SIZE = 32;
@@ -160,14 +156,8 @@ int main(int argc, char **argv) {
     const unsigned PART_SIZE = 16;
     uint8_t encrypt_key [PART_SIZE];
     uint8_t sign_key [PART_SIZE];
-    int i;
- 	for (i = 0; i < PART_SIZE; i++) {
-        encrypt_key[i] = shared_sha256.bytes[i];
-    }
- 	for (i = 0; i < PART_SIZE; i++) {
-        sign_key[i] = shared_sha256.bytes[i + PART_SIZE];
-    }
-
+    memcpy(encrypt_key, shared_sha256.bytes, PART_SIZE);
+    memcpy(sign_key, &shared_sha256.bytes[PART_SIZE], PART_SIZE);
     phex("encrypt_key", encrypt_key, PART_SIZE);
     phex("sign_key", sign_key, PART_SIZE);
 
@@ -177,26 +167,39 @@ int main(int argc, char **argv) {
 
     phex("public_sha256", public_sha256.bytes, 32);
     uint8_t iv [16];
- 	for (i = 0; i < 16; i++) {
-        iv[i] = public_sha256.bytes[i];
-    }
+    memcpy(iv, public_sha256.bytes, 16);
     phex("iv", iv, 16);
 
-    // TODO: check MAC!
+    int cipher_size = strlen(ciphertext);
+    int data_size = 16 + cipher_size;
+    uint8_t calc_data[data_size];
+    memcpy(calc_data, iv, 16);
+    memcpy(&calc_data[16], ciphertext, cipher_size);
+    uint8_t calc_mac[32];
+    phex("calc_data", calc_data, data_size);
+    phex("calc_mac", calc_mac, 32);
+
+    hmac_sha256(sign_key, PART_SIZE, calc_data, data_size, calc_mac, 32);
+    phex("calc_mac", calc_mac, 32);
+    if ( memcmp(mac, calc_mac,32) ) {
+        printf("MAC is incorrect\n");
+        return 1;
+    }
 
     // decrypt ciphertext with encrypt_key and iv
     struct AES_ctx ctx;
-    int cipher_size = strlen(ciphertext);
     AES_init_ctx_iv(&ctx, encrypt_key, iv);
     AES_CBC_decrypt_buffer(&ctx, ciphertext, cipher_size);
     phex("ciphertext", ciphertext, cipher_size);
 
     // remove padding given in last character
     uint8_t pad_size = ciphertext[cipher_size-1];
- 	for (i = cipher_size - pad_size; i < cipher_size; i++) {
- 	    if ( ciphertext[i] != ciphertext[cipher_size-1]) break;
-        ciphertext[i] = 0;
-    }
+    uint8_t pad_start = cipher_size - pad_size;
+ 	if ( pad_size != ciphertext[pad_start] ) {
+ 	    printf("incorrect padding in ciphertext\n");
+ 	    return 1;
+ 	}
+ 	memset(&ciphertext[pad_start], 0, pad_size);
     phex("ciphertext no padding", ciphertext, cipher_size);
     printf("%s", ciphertext);
 
