@@ -71,11 +71,11 @@ int parse_packed_data (char * data, uint8_t ** public_key, uint8_t ** mac, uint8
     uint8_t public_size;
     sscanf(in_pos, "%2hhx", &public_size);
     in_pos += 2;
+    dprintf("public_size: %d\n", public_size);
     if ( public_size != KEY_LENGTH ) {
         printf("invalid public key length %d in encrypted value\n", public_size);
         return 0;
     }
-    dprintf("public_size: %d\n", public_size);
 
     int i;
     *public_key = malloc((KEY_LENGTH + 1));
