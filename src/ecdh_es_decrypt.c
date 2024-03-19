@@ -85,8 +85,8 @@ uint8_t parse_packed_data (char * data, uint8_t ** public_key, uint8_t ** mac, u
     }
     phex("public_key", *public_key, KEY_LENGTH);
 
-    const unsigned MAC_LENGTH = 32;
-    uint8_t mac_size;
+    const uint16_t MAC_LENGTH = 32;
+    uint16_t mac_size;
     sscanf(in_pos, "%4hhx", &mac_size);
     dprintf("mac_size_hex: %04X\n", mac_size);
     dprintf("mac_size: %d\n", mac_size);
