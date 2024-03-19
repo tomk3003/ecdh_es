@@ -58,7 +58,7 @@ uint8_t key_from_file (const char * fname, uint8_t * key) {
 }
 
 
-uint8_t parse_packed_data (char * data, uint8_t ** public_key, uint8_t ** mac, uint8_t ** ciphertext) {
+int parse_packed_data (char * data, uint8_t ** public_key, uint8_t ** mac, uint8_t ** ciphertext) {
 
     unsigned char * in_pos = data;
     dprintf("parsing data: >>%s<<\n", data);
@@ -73,7 +73,7 @@ uint8_t parse_packed_data (char * data, uint8_t ** public_key, uint8_t ** mac, u
     in_pos += 2;
     if ( public_size != KEY_LENGTH ) {
         printf("invalid public key length %d in encrypted value\n", public_size);
-        return 1;
+        return 0;
     }
     dprintf("public_size: %d\n", public_size);
 
@@ -94,7 +94,7 @@ uint8_t parse_packed_data (char * data, uint8_t ** public_key, uint8_t ** mac, u
 
     if ( mac_size != MAC_LENGTH ) {
         printf("invalid mac size %d in encrypted value\n", mac_size);
-        return 1;
+        return 0;
     }
 
     *mac = malloc(MAC_LENGTH + 1);
@@ -117,7 +117,7 @@ uint8_t parse_packed_data (char * data, uint8_t ** public_key, uint8_t ** mac, u
     }
     phex("ciphertext", *ciphertext, cipher_size);
 
-    return 0;
+    return cipher_size;
 }
 
 
@@ -138,8 +138,8 @@ int main(int argc, char **argv) {
     uint8_t *public_key;
     uint8_t * mac;
     uint8_t * ciphertext;
-    err = parse_packed_data(argv[2], &public_key, &mac, &ciphertext);
-    if ( err > 0 ) exit(err);
+    int cipher_size = parse_packed_data(argv[2], &public_key, &mac, &ciphertext);
+    if ( cipher_size == 0 ) return 1;
     phex("public_key", public_key, KEY_LENGTH);
 
     // generate shared key
@@ -170,18 +170,16 @@ int main(int argc, char **argv) {
     memcpy(iv, public_sha256.bytes, 16);
     phex("iv", iv, 16);
 
-    int cipher_size = strlen(ciphertext);
     int data_size = 16 + cipher_size;
     uint8_t calc_data[data_size];
     memcpy(calc_data, iv, 16);
-    memcpy(&calc_data[16], ciphertext, cipher_size);
+    memcpy(calc_data+16, ciphertext, cipher_size);
     uint8_t calc_mac[32];
     phex("calc_data", calc_data, data_size);
-    phex("calc_mac", calc_mac, 32);
 
     hmac_sha256(sign_key, PART_SIZE, calc_data, data_size, calc_mac, 32);
     phex("calc_mac", calc_mac, 32);
-    if ( memcmp(mac, calc_mac,32) ) {
+    if ( memcmp(mac, calc_mac, 32) ) {
         printf("MAC is incorrect\n");
         return 1;
     }
