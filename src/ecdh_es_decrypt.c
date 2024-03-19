@@ -87,10 +87,10 @@ int parse_packed_data (char * data, uint8_t ** public_key, uint8_t ** mac, uint8
 
     const uint16_t MAC_LENGTH = 32;
     uint16_t mac_size;
-    sscanf(in_pos, "%4hhx", &mac_size);
+    sscanf(in_pos, "%4hx", &mac_size);
+    in_pos += 4;
     dprintf("mac_size_hex: %04X\n", mac_size);
     dprintf("mac_size: %d\n", mac_size);
-    in_pos += 4;
 
     if ( mac_size != MAC_LENGTH ) {
         printf("invalid mac size %d in encrypted value\n", mac_size);
