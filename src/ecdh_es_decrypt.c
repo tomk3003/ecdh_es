@@ -135,10 +135,15 @@ int main(int argc, char **argv) {
     phex("private_key", private_key, KEY_LENGTH);
 
     // unpack encrypted hex string from argv[2]
-    uint8_t *public_key;
+    // remove 'ecdhes' from beginning if found
+    uint8_t * public_key;
     uint8_t * mac;
     uint8_t * ciphertext;
-    int cipher_size = parse_packed_data(argv[2], &public_key, &mac, &ciphertext);
+    char * encdata = argv[2];
+    if ( ! strncmp("ecdhes", encdata, 6) ) {
+        encdata += 6;
+    }
+    int cipher_size = parse_packed_data(encdata, &public_key, &mac, &ciphertext);
     if ( cipher_size == 0 ) return 1;
     phex("public_key", public_key, KEY_LENGTH);
 
