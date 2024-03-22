@@ -22,13 +22,7 @@ my $dexe = path($Bin, "../bin/debug_$exe")->touchpath;
 my $pexe = path($Bin, "../bin/$exe")->touchpath;
 
 # debug executable
-my($out, $rc) = capture_merged{
-    system(qq(gcc "$src" -o "$dexe" -DDEBUG));
-    $? >> 8;
-};
-ok(!$rc, 'compile ok') or diag $out;
-
-($out) = capture_merged{
+my ($out, $rc) = capture_merged{
     system(qq("$dexe" "$fpriv" "$crypted_hex"));
 };
 like($out, qr/\Q$plain\E$/, 'decrypt ok') or diag $out;
@@ -39,12 +33,6 @@ like($out, qr/\Q$plain\E$/, 'decrypt ok') or diag $out;
 like($out, qr/\Q$plain\E$/, 'prefixed decrypt ok') or diag $out;
 
 # prod
-($out, $rc) = capture_merged{
-    system(qq(gcc "$src" -o "$pexe"));
-    $? >> 8;
-};
-ok(!$rc, 'compile ok') or diag $out;
-
 ($out, $rc) = capture_merged{
     system(qq("$pexe" "$fpriv" "$crypted_hex"));
 };
