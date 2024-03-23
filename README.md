@@ -12,7 +12,7 @@ C implemetation of the decryption algorithm used by the Perl module
 
 ## Build
 
-  `gcc src/ecdh_es_decrypt.c -o ecdh_es_decrypt.c`
+  `make`
 
 ## Usage
 

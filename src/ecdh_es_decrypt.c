@@ -39,18 +39,21 @@ uint8_t key_from_file (const char * fname, uint8_t * key) {
         return 1;
     }
 
-    unsigned char key_hex [HEX_LENGTH + 1], *pkh_pos = key_hex;
-    fgets(key_hex, HEX_LENGTH + 1, fp);
+    unsigned char key_hex [HEX_LENGTH], *pkh_pos = key_hex;
+    size_t length = fread(key_hex, 1, HEX_LENGTH, fp);
     fclose(fp);
 
-    if ( strlen(key_hex) != HEX_LENGTH ) {
+    if ( length != HEX_LENGTH ) {
         printf("key length not %d (%d bytes in hex)\n", HEX_LENGTH, KEY_LENGTH);
         return 1;
     }
 
     int i;
- 	for (i = 0; i < KEY_LENGTH; i++) {
-        sscanf(pkh_pos, "%2hhx", &key[i]);
+    for (i = 0; i < KEY_LENGTH; i++) {
+        if ( sscanf(pkh_pos, "%2hhx", key + i) != 1 ) {
+            printf("Invalid hex in key file", HEX_LENGTH, KEY_LENGTH);
+            return 1;
+        }
         pkh_pos += 2;
     }
 
