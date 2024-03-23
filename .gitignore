@@ -54,3 +54,4 @@ dkms.conf
 .idea/
 .bin/
 /bin/
+/_Deparsed_XSubs.pm
